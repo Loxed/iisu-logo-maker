@@ -189,7 +189,7 @@ export default function App() {
     >
       <aside className="panel">
         <header>
-          <h1>iiSU Icon Maker</h1>
+          <h1>SVG Extrude</h1>
           <span className={`status ${status.kind}`}>{status.text}</span>
         </header>
 
@@ -282,9 +282,26 @@ export default function App() {
             value={params.strokeWidth} onChange={(v) => set("strokeWidth", v)} />
           <Toggle label="Fill holes" value={params.fillHoles}
             onChange={(v) => set("fillHoles", v)} />
-          <StopsField stops={params.gradientStops} onChange={(v) => set("gradientStops", v)} />
-          <NumberField label="Gradient angle" min={0} max={360} step={1}
-            value={params.gradientAngle} onChange={(v) => set("gradientAngle", v)} />
+          <SelectField label="Gradient" value={params.gradientMode}
+            options={[
+              { value: "linear" as const, label: "linear ramp" },
+              { value: "points" as const, label: "anchor points" },
+            ]}
+            onChange={(v) => set("gradientMode", v)} />
+          <StopsField
+            stops={params.gradientStops}
+            mode={params.gradientMode}
+            sharpness={params.gradientSharpness}
+            onChange={(v) => set("gradientStops", v)}
+          />
+          {params.gradientMode === "linear" ? (
+            <NumberField label="Gradient angle" min={0} max={360} step={1}
+              value={params.gradientAngle} onChange={(v) => set("gradientAngle", v)} />
+          ) : (
+            <NumberField label="Blend" min={0.5} max={4} step={0.1}
+              value={params.gradientSharpness}
+              onChange={(v) => set("gradientSharpness", v)} />
+          )}
           <SelectField label="Gradient span" value={params.gradientSpace}
             options={[
               { value: "shape" as const, label: "shape" },

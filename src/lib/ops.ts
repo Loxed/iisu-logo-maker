@@ -534,6 +534,66 @@ export function gradientLut(stops: { pos: number; color: string }[], n = 1024): 
   return lut;
 }
 
+/**
+ * Inverse distance field: every color owns an anchor in the unit box and each
+ * cell mixes them by 1 / distance^(2 * sharpness).
+ *
+ * It is baked into a small grid and sampled bilinearly by the renderer, since
+ * the field is smooth: 128 by 128 cells cost nothing and a per pixel solve
+ * over nine million pixels would.
+ */
+export function gradientField(
+  anchors: { x: number; y: number; color: string }[],
+  size: number,
+  sharpness: number
+): Uint8Array {
+  const out = new Uint8Array(size * size * 3);
+  const pts = anchors.map((a) => ({
+    x: Math.min(1, Math.max(0, a.x)),
+    y: Math.min(1, Math.max(0, a.y)),
+    rgb: hexToRgb(a.color),
+  }));
+  if (!pts.length) return out;
+  const power = Math.max(0.25, sharpness);
+
+  for (let j = 0; j < size; j++) {
+    const v = (j + 0.5) / size;
+    for (let i = 0; i < size; i++) {
+      const u = (i + 0.5) / size;
+      let wsum = 0;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let exact = -1;
+      for (let k = 0; k < pts.length; k++) {
+        const dx = u - pts[k].x;
+        const dy = v - pts[k].y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < 1e-9) {
+          exact = k;
+          break;
+        }
+        const w = 1 / Math.pow(d2, power);
+        wsum += w;
+        r += w * pts[k].rgb[0];
+        g += w * pts[k].rgb[1];
+        b += w * pts[k].rgb[2];
+      }
+      const o = (j * size + i) * 3;
+      if (exact >= 0) {
+        out[o] = pts[exact].rgb[0];
+        out[o + 1] = pts[exact].rgb[1];
+        out[o + 2] = pts[exact].rgb[2];
+      } else {
+        out[o] = r / wsum + 0.5;
+        out[o + 1] = g / wsum + 0.5;
+        out[o + 2] = b / wsum + 0.5;
+      }
+    }
+  }
+  return out;
+}
+
 export type ShadingRamps = { value: Float32Array; sat: Float32Array; edge: Float32Array };
 
 /**

@@ -116,6 +116,13 @@ is no backend to run.
   artwork. That is what to use for an icon published as separate facets with
   gaps between them, where growing an outline around the geometry itself would
   follow every gap.
+- Gradient, under Border, switches between a linear ramp and anchor points. In
+  anchor point mode each color sits at its own spot in the box and the field
+  between them is filled in, which is how a four color mark is built: green at
+  top center, blue at middle left, yellow at middle right, red at bottom
+  center. Drag the dots on the pad, they snap to the nine usual spots. Blend
+  controls how tightly each color stays around its anchor. The Four corners
+  preset is that setup, ready to recolor.
 - Colors, under Border, sets how many stops the gradient has, from 2 to 5. The
   current ramp is resampled, so the look is kept and only the number of handles
   changes. Each stop keeps its own position and hex field.

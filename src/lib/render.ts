@@ -12,6 +12,7 @@
 import {
   dilateRound,
   fillEnclosed,
+  gradientField,
   gradientLut,
   hexToRgb,
   resizeArea,
@@ -25,8 +26,32 @@ import {
   normalizedStops,
   resolvedExtrusionColor,
   scaleParams,
+  stopAnchor,
   type Params,
 } from "./params";
+
+const FIELD_SIZE = 160;
+
+/** Bilinear sample of the point mode field, clamped at the edges. */
+function sampleField(field: Uint8Array, n: number, u: number, v: number, out: number[]): void {
+  const x = Math.min(n - 1, Math.max(0, u * n - 0.5));
+  const y = Math.min(n - 1, Math.max(0, v * n - 0.5));
+  const x0 = x | 0;
+  const y0 = y | 0;
+  const x1 = Math.min(n - 1, x0 + 1);
+  const y1 = Math.min(n - 1, y0 + 1);
+  const fx = x - x0;
+  const fy = y - y0;
+  const a = (y0 * n + x0) * 3;
+  const b = (y0 * n + x1) * 3;
+  const c = (y1 * n + x0) * 3;
+  const d = (y1 * n + x1) * 3;
+  for (let k = 0; k < 3; k++) {
+    const top = field[a + k] + (field[b + k] - field[a + k]) * fx;
+    const bottom = field[c + k] + (field[d + k] - field[c + k]) * fx;
+    out[k] = top + (bottom - top) * fy;
+  }
+}
 
 export type RenderResult = {
   rgba: Uint8ClampedArray<ArrayBuffer>;
@@ -142,6 +167,20 @@ export function renderToRgba(
   const cx = (box[0] + box[2]) / 2;
   const cy = (box[1] + box[3]) / 2;
 
+  const points = p.gradientMode === "points";
+  const field = points
+    ? gradientField(
+        stops.map((st) => {
+          const [ax, ay] = stopAnchor(st);
+          return { x: ax, y: ay, color: st.color };
+        }),
+        FIELD_SIZE,
+        p.gradientSharpness
+      )
+    : null;
+  const boxW = Math.max(1e-6, box[2] - box[0]);
+  const boxH = Math.max(1e-6, box[3] - box[1]);
+
   const ramps = shadingRamps({
     shadingEnabled: p.shadingEnabled,
     extrusionDarken: p.extrusionDarken,
@@ -160,14 +199,22 @@ export function renderToRgba(
   const a = (p.extrusionAngle * Math.PI) / 180;
   const depthShift =
     (p.extrusionDepth * (Math.cos(a) * gx + Math.sin(a) * gy)) / extent;
+  // in point mode the source of a swept pixel is a real position, not a
+  // parameter on a ramp, so the offset is carried in both axes
+  const shiftU = (p.extrusionDepth * Math.cos(a)) / boxW;
+  const shiftV = (p.extrusionDepth * Math.sin(a)) / boxH;
 
   // --- composite ----------------------------------------------------------
   const out = new Uint8ClampedArray(size * size * 4);
   const dtg = gx / extent;
+  const du = 1 / boxW;
+  const rgbBuf = [0, 0, 0];
   for (let y = 0; y < size; y++) {
     let tg = 0.5 + (-cx * gx + (y - cy) * gy) / extent;
+    const gv = (y - box[1]) / boxH;
+    let gu = (0 - box[0]) / boxW;
     const row = y * size;
-    for (let x = 0; x < size; x++, tg += dtg) {
+    for (let x = 0; x < size; x++, tg += dtg, gu += du) {
       const i = row + x;
       let pr = 0;
       let pg = 0;
@@ -182,15 +229,25 @@ export function renderToRgba(
           let g: number;
           let b: number;
           if (inherit) {
-            const ts = tg - (d / 255) * depthShift;
-            const gi =
-              (Math.min(lutN - 1, Math.max(0, Math.round(ts * (lutN - 1)))) | 0) * 3;
+            let r0: number;
+            let g0: number;
+            let b0: number;
+            if (field) {
+              sampleField(field, FIELD_SIZE, gu - (d / 255) * shiftU, gv - (d / 255) * shiftV, rgbBuf);
+              r0 = rgbBuf[0];
+              g0 = rgbBuf[1];
+              b0 = rgbBuf[2];
+            } else {
+              const ts = tg - (d / 255) * depthShift;
+              const gi =
+                (Math.min(lutN - 1, Math.max(0, Math.round(ts * (lutN - 1)))) | 0) * 3;
+              r0 = lut[gi];
+              g0 = lut[gi + 1];
+              b0 = lut[gi + 2];
+            }
             const s = ramps.sat[d];
             const v = ramps.value[d];
             const e = ramps.edge[d];
-            const r0 = lut[gi];
-            const g0 = lut[gi + 1];
-            const b0 = lut[gi + 2];
             const mx = r0 > g0 ? (r0 > b0 ? r0 : b0) : g0 > b0 ? g0 : b0;
             r = (mx - (mx - r0) * s) * v;
             g = (mx - (mx - g0) * s) * v;
@@ -215,11 +272,24 @@ export function renderToRgba(
 
       const fa = outerA[i] / 255;
       if (fa > 0) {
-        const gi = (Math.min(lutN - 1, Math.max(0, Math.round(tg * (lutN - 1)))) | 0) * 3;
+        let fr: number;
+        let fg: number;
+        let fb: number;
+        if (field) {
+          sampleField(field, FIELD_SIZE, gu, gv, rgbBuf);
+          fr = rgbBuf[0];
+          fg = rgbBuf[1];
+          fb = rgbBuf[2];
+        } else {
+          const gi = (Math.min(lutN - 1, Math.max(0, Math.round(tg * (lutN - 1)))) | 0) * 3;
+          fr = lut[gi];
+          fg = lut[gi + 1];
+          fb = lut[gi + 2];
+        }
         const inv = 1 - fa;
-        pr = pr * inv + lut[gi] * fa;
-        pg = pg * inv + lut[gi + 1] * fa;
-        pb = pb * inv + lut[gi + 2] * fa;
+        pr = pr * inv + fr * fa;
+        pg = pg * inv + fg * fa;
+        pb = pb * inv + fb * fa;
         pa = pa * inv + fa;
       }
 

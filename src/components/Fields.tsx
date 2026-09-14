@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { GradientStop } from "../lib/params";
 import { ColorPicker, HexInput, hexToRgb, rgbToHex } from "./ColorPicker";
+import { GradientPad } from "./GradientPad";
 
 export { HexInput, normalizeHex } from "./ColorPicker";
 
@@ -123,6 +124,8 @@ function sampleGradient(stops: GradientStop[], t: number): string {
 
 export function StopsField(props: {
   stops: GradientStop[];
+  mode: "linear" | "points";
+  sharpness: number;
   onChange: (stops: GradientStop[]) => void;
 }) {
   const update = (i: number, patch: Partial<GradientStop>) => {
@@ -173,21 +176,29 @@ export function StopsField(props: {
           +
         </button>
       </Row>
-      <div className="gradient-bar" style={{ background: css }} />
+      {props.mode === "points" ? (
+        <GradientPad stops={props.stops} sharpness={props.sharpness} onChange={props.onChange} />
+      ) : (
+        <div className="gradient-bar" style={{ background: css }} />
+      )}
       {props.stops.map((s, i) => (
         <div className="stop" key={i}>
-          <input
-            className="pos"
-            type="number"
-            min={0}
-            max={1}
-            step={0.01}
-            value={s.pos}
-            title="position along the gradient, 0 to 1"
-            onChange={(e) =>
-              update(i, { pos: Math.min(1, Math.max(0, Number(e.target.value))) })
-            }
-          />
+          {props.mode === "linear" ? (
+            <input
+              className="pos"
+              type="number"
+              min={0}
+              max={1}
+              step={0.01}
+              value={s.pos}
+              title="position along the gradient, 0 to 1"
+              onChange={(e) =>
+                update(i, { pos: Math.min(1, Math.max(0, Number(e.target.value))) })
+              }
+            />
+          ) : (
+            <span className="pos index">{i + 1}</span>
+          )}
           <ColorPicker value={s.color} onChange={(v) => update(i, { color: v })} />
           <HexInput value={s.color} onChange={(v) => update(i, { color: v })} />
           <button

@@ -7,7 +7,9 @@
  * 3000 px export.
  */
 
-export type GradientStop = { pos: number; color: string };
+/** `pos` places the stop along the linear ramp, `x` and `y` place it in the
+ *  box for the point mode, both normalized 0 to 1. */
+export type GradientStop = { pos: number; color: string; x?: number; y?: number };
 
 export type Params = {
   canvasSize: number;
@@ -23,7 +25,12 @@ export type Params = {
   /** close the pockets of the front face that the border cannot reach */
   fillHoles: boolean;
   gradientStops: GradientStop[];
+  /** linear: one ramp along gradientAngle. points: every color sits at its own
+   *  anchor in the box and the field between them is interpolated. */
+  gradientMode: "linear" | "points";
   gradientAngle: number;
+  /** point mode only: 1 blends broadly, 4 keeps each color close to its anchor */
+  gradientSharpness: number;
   gradientSpace: "shape" | "canvas";
 
   extrusionEnabled: boolean;
@@ -60,7 +67,9 @@ export const DEFAULTS: Params = {
     { pos: 0, color: "#2FFF74" },
     { pos: 1, color: "#369052" },
   ],
+  gradientMode: "linear",
   gradientAngle: 90,
+  gradientSharpness: 1.6,
   gradientSpace: "shape",
 
   extrusionEnabled: true,
@@ -105,6 +114,20 @@ export const PRESETS: Preset[] = [
     },
   },
   {
+    name: "Four corners",
+    params: {
+      gradientMode: "points",
+      gradientStops: [
+        { pos: 0, color: "#2AA84A", x: 0.5, y: 0.02 },
+        { pos: 0.33, color: "#4285F4", x: 0.02, y: 0.5 },
+        { pos: 0.66, color: "#FBBC04", x: 0.98, y: 0.5 },
+        { pos: 1, color: "#EA4335", x: 0.5, y: 0.98 },
+      ],
+      extrusionColor: "gradient",
+      extrusionDepth: 200,
+    },
+  },
+  {
     name: "Blue Depth",
     params: {
       gradientStops: [
@@ -135,9 +158,14 @@ export function scaleParams(p: Params): Params {
   };
 }
 
+/** Anchor of a stop in the box, falling back to its position on the ramp. */
+export function stopAnchor(s: GradientStop): [number, number] {
+  return [s.x ?? 0.5, s.y ?? s.pos];
+}
+
 export function normalizedStops(p: Params): GradientStop[] {
-  const stops = [...p.gradientStops]
-    .map((s) => ({ pos: Number(s.pos), color: s.color }))
+  const stops: GradientStop[] = [...p.gradientStops]
+    .map((s) => ({ pos: Number(s.pos), color: s.color, x: s.x, y: s.y }))
     .sort((a, b) => a.pos - b.pos);
   if (stops.length === 0) return [...DEFAULTS.gradientStops];
   if (stops[0].pos > 0) stops.unshift({ pos: 0, color: stops[0].color });

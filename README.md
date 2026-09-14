@@ -75,6 +75,31 @@ and cropped with the same rectangle, so two exports of one artwork stay in
 register without any manual alignment. Framing is always driven by the shape.
 A file used only as a reference is skipped by the batch export.
 
+## Gradient modes
+
+**linear** runs one ramp across the front face along `gradientAngle`, with any
+number of stops.
+
+**anchor points** drops each color at its own spot in the box and fills
+everything between them. Green at top center, blue at middle left, yellow at
+middle right, red at bottom center gives the four way blend of a facetted mark,
+which no linear ramp can do. The field is inverse distance weighted: a pixel
+takes the mix of every color by 1 / distance to its anchor, raised to `Blend`.
+Blend 1 spreads each color broadly, Blend 3 or 4 keeps it close to its anchor
+and the boundaries read almost as facets.
+
+The pad under the mode selector is the editor and the preview at once: it draws
+the same field the renderer uses, and the dots are dragged to place each color.
+A dot dropped near one of the nine usual spots (corners, edge centers, center)
+snaps to it, so top center really is top center.
+
+The field is baked into a 160 by 160 grid and sampled bilinearly per pixel,
+since it is smooth. Solving it per pixel over nine million pixels would cost
+seconds for a result nobody could tell apart.
+
+The extrusion follows in `gradient` mode: a swept pixel samples the field at the
+point it came from, so the side face carries the color of the region above it.
+
 ## Parameters
 
 | name | default | meaning |
@@ -88,7 +113,9 @@ A file used only as a reference is skipped by the batch export.
 | `strokeWidth` | 210 | outside stroke in pixels, round joins |
 | `fillHoles` | false | close the pockets of the front face that the canvas border cannot reach, so an infinity loop or a letter O reads as one solid shape instead of showing the sweep through its holes |
 | `gradientStops` | `0 #2FFF74`, `1 #369052` | any number of stops, position 0 to 1. The 2 3 4 5 buttons resample the current ramp to that many evenly spaced colors, and `+` inserts one more |
-| `gradientAngle` | 90 | 90 runs the gradient top to bottom, 0 left to right |
+| `gradientMode` | `linear` | `linear` for one ramp, `points` for color anchors placed in the box |
+| `gradientAngle` | 90 | linear mode: 90 runs the gradient top to bottom, 0 left to right |
+| `gradientSharpness` | 1.6 | point mode: 1 blends broadly, 4 keeps each color close to its anchor |
 | `gradientSpace` | `shape` | `shape` spans the front face box, `canvas` spans the canvas |
 | `extrusionEnabled` | true | draw the swept body behind the front face |
 | `extrusionDepth` | 150 | sweep distance in pixels |
@@ -114,7 +141,7 @@ goes 0 to 100: steepest at the fold, so it reads as a sheen instead of a stripe.
 ## Presets
 
 Green Extruded (default), Green Extruded (lit edge), Green Extruded (inherit
-gradient), Dark fold, Sunset, Blue Depth. They live in `src/lib/params.ts`.
+gradient), Dark fold, Sunset, Four corners, Blue Depth. They live in `src/lib/params.ts`.
 Save preset in the interface writes the current values as JSON and Load preset
 reads them back.
 
