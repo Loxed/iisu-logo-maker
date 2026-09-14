@@ -1,0 +1,16 @@
+# core renderer
+numpy>=1.24
+opencv-python-headless>=4.8
+Pillow>=10.0
+
+# SVG rasterizer, one is enough
+# cairosvg is the fastest path but needs the cairo library on the system
+# resvg-py carries its own renderer and needs nothing else, which is why it is
+# the one picked on Windows
+cairosvg>=2.7 ; sys_platform != "win32"
+resvg-py>=0.5 ; sys_platform == "win32"
+
+# local web UI (not needed for the CLI or for importing svgextrude)
+fastapi>=0.110
+uvicorn>=0.27
+python-multipart>=0.0.9
