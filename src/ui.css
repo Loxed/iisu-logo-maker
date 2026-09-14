@@ -107,6 +107,14 @@ button.primary:hover { background: #3da864; }
 button.small, .file-btn.small span { padding: 4px 8px; }
 button:disabled { opacity: 0.45; cursor: default; }
 
+.seg { display: flex; gap: 0; flex: 1; }
+.seg button {
+  flex: 1; border-radius: 0; border-left-width: 0; padding: 4px 0;
+}
+.seg button:first-child { border-radius: 5px 0 0 5px; border-left-width: 1px; }
+.seg button:last-child { border-radius: 0 5px 5px 0; }
+.seg button.active { color: var(--accent); border-color: var(--accent); z-index: 1; }
+
 .gradient-bar {
   height: 14px; border-radius: 4px; border: 1px solid var(--line);
   margin: 0 0 8px; background-clip: padding-box;

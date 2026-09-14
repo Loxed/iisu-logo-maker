@@ -61,7 +61,7 @@ def build_app():
         ) from exc
 
     _load_examples()
-    app = FastAPI(title="SVG Extrude")
+    app = FastAPI(title="iiSU Icon Maker")
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 
     @app.get("/")

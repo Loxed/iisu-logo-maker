@@ -1,6 +1,6 @@
 /** Main thread side of the renderer: rasterize, keep the worker fed, render. */
 
-import { loadLogoMask, probeInk } from "./raster";
+import { loadMaskPair, probeInk } from "./raster";
 import { computeLayout, scaleParams, type Params } from "./params";
 
 export type RenderOutput = {
@@ -41,22 +41,36 @@ export class Renderer {
     };
   }
 
-  /** Rasterize at the resolution this parameter set needs, then render. */
-  async render(svgText: string, params: Params): Promise<RenderOutput> {
+  /**
+   * Rasterize at the resolution this parameter set needs, then render.
+   *
+   * `shapeText` drives the outline and the extrusion. When it differs from
+   * `logoText`, the artwork is rasterized in the same pixel frame, which is
+   * what lets a split up icon keep a clean outer silhouette.
+   */
+  async render(logoText: string, params: Params, shapeText?: string | null): Promise<RenderOutput> {
+    const shape = shapeText || logoText;
     const scaled = scaleParams(params);
-    const ink = await probeInk(svgText);
+    const ink = await probeInk(shape);
     const layout = computeLayout(ink.fracW, ink.fracH, scaled);
     const needed = Math.max(layout.logo.w, layout.logo.h) * scaled.supersample;
-    const mask = await loadLogoMask(svgText, needed);
+    const mask = await loadMaskPair(shape, shape === logoText ? null : logoText, needed);
 
     if (!this.sentMasks.has(mask.key)) {
-      const copy = mask.data.slice();
+      const shapeCopy = mask.shape.slice();
+      const logoCopy = mask.logo ? mask.logo.slice() : null;
       this.worker.postMessage(
-        { type: "mask", key: mask.key, data: copy.buffer, w: mask.w, h: mask.h },
-        [copy.buffer]
+        {
+          type: "mask",
+          key: mask.key,
+          shape: shapeCopy.buffer,
+          logo: logoCopy ? logoCopy.buffer : null,
+          w: mask.w,
+          h: mask.h,
+        },
+        logoCopy ? [shapeCopy.buffer, logoCopy.buffer] : [shapeCopy.buffer]
       );
       this.sentMasks.add(mask.key);
-      // the worker keeps the last few masks, so forget the oldest keys here too
       if (this.sentMasks.size > 4) {
         this.sentMasks.delete(this.sentMasks.values().next().value as string);
       }

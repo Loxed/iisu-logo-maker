@@ -58,6 +58,23 @@ npm run preview    # serve dist/ to check it
 Steps 2 to 6 run in a Web Worker, so the interface stays responsive during a
 3000 px export.
 
+## Shape reference
+
+Icons are often published as a set of separate facets with thin gaps between
+them, the Google Play mark being the usual example. Growing an outline around
+that geometry follows every gap, so the border cuts into the artwork and the
+result looks broken.
+
+Shape ref, in the Source panel, points the active file at another loaded file.
+The outline and the extrusion then come from that file's silhouette, while the
+white artwork on top still comes from the active one. Load the solid version of
+the mark as the reference and the split version as the logo.
+
+Both files are rasterized into the same pixel frame, fitted with xMidYMid meet
+and cropped with the same rectangle, so two exports of one artwork stay in
+register without any manual alignment. Framing is always driven by the shape.
+A file used only as a reference is skipped by the batch export.
+
 ## Parameters
 
 | name | default | meaning |
@@ -70,7 +87,7 @@ Steps 2 to 6 run in a Web Worker, so the interface stays responsive during a
 | `logoEnabled` | true | draw the silhouette on top of the front face |
 | `strokeWidth` | 210 | outside stroke in pixels, round joins |
 | `fillHoles` | false | close the pockets of the front face that the canvas border cannot reach, so an infinity loop or a letter O reads as one solid shape instead of showing the sweep through its holes |
-| `gradientStops` | `0 #2FFF74`, `1 #369052` | any number of stops, position 0 to 1 |
+| `gradientStops` | `0 #2FFF74`, `1 #369052` | any number of stops, position 0 to 1. The 2 3 4 5 buttons resample the current ramp to that many evenly spaced colors, and `+` inserts one more |
 | `gradientAngle` | 90 | 90 runs the gradient top to bottom, 0 left to right |
 | `gradientSpace` | `shape` | `shape` spans the front face box, `canvas` spans the canvas |
 | `extrusionEnabled` | true | draw the swept body behind the front face |

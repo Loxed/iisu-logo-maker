@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { GradientStop } from "../lib/params";
-import { ColorPicker, HexInput } from "./ColorPicker";
+import { ColorPicker, HexInput, hexToRgb, rgbToHex } from "./ColorPicker";
 
 export { HexInput, normalizeHex } from "./ColorPicker";
 
@@ -99,12 +99,44 @@ export function SelectField<T extends string | number>(props: {
   );
 }
 
+/** Color of the ramp at t, with the same linear interpolation as the renderer. */
+function sampleGradient(stops: GradientStop[], t: number): string {
+  const sorted = [...stops].sort((a, b) => a.pos - b.pos);
+  if (!sorted.length) return "#FFFFFF";
+  if (t <= sorted[0].pos) return sorted[0].color;
+  const last = sorted[sorted.length - 1];
+  if (t >= last.pos) return last.color;
+  let i = 0;
+  while (i < sorted.length - 2 && t > sorted[i + 1].pos) i++;
+  const a = sorted[i];
+  const b = sorted[i + 1];
+  const span = b.pos - a.pos;
+  const f = span <= 1e-6 ? 0 : (t - a.pos) / span;
+  const ca = hexToRgb(a.color);
+  const cb = hexToRgb(b.color);
+  return rgbToHex(
+    ca[0] + (cb[0] - ca[0]) * f,
+    ca[1] + (cb[1] - ca[1]) * f,
+    ca[2] + (cb[2] - ca[2]) * f
+  );
+}
+
 export function StopsField(props: {
   stops: GradientStop[];
   onChange: (stops: GradientStop[]) => void;
 }) {
   const update = (i: number, patch: Partial<GradientStop>) => {
     props.onChange(props.stops.map((s, j) => (i === j ? { ...s, ...patch } : s)));
+  };
+  // resampling the current ramp keeps the look while changing how many
+  // handles there are to edit
+  const setCount = (n: number) => {
+    props.onChange(
+      Array.from({ length: n }, (_, i) => {
+        const pos = n === 1 ? 0 : i / (n - 1);
+        return { pos, color: sampleGradient(props.stops, pos) };
+      })
+    );
   };
   const sorted = [...props.stops].sort((a, b) => a.pos - b.pos);
   const css = `linear-gradient(to right, ${sorted
@@ -113,18 +145,32 @@ export function StopsField(props: {
 
   return (
     <div className="stops">
-      <Row label="Gradient">
+      <Row label="Colors">
+        <div className="seg" role="group" aria-label="number of gradient colors">
+          {[2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              className={props.stops.length === n ? "active" : ""}
+              onClick={() => setCount(n)}
+              title={`${n} evenly spaced colors`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
         <button
           className="small"
+          title="add one stop between the existing ones"
           onClick={() => {
             const first = props.stops[0]?.pos ?? 0;
             const last = props.stops[props.stops.length - 1]?.pos ?? 1;
-            const next = [...props.stops, { pos: (first + last) / 2, color: "#31C463" }];
+            const mid = (first + last) / 2;
+            const next = [...props.stops, { pos: mid, color: sampleGradient(props.stops, mid) }];
             next.sort((a, b) => a.pos - b.pos);
             props.onChange(next);
           }}
         >
-          + stop
+          +
         </button>
       </Row>
       <div className="gradient-bar" style={{ background: css }} />

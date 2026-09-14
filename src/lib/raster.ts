@@ -10,6 +10,16 @@
 
 export type MaskData = { data: Uint8Array; w: number; h: number; key: string };
 
+/** Two masks in the same frame: the silhouette that drives the outline and the
+ *  extrusion, and the artwork drawn on top of it. */
+export type MaskPair = {
+  shape: Uint8Array;
+  logo: Uint8Array | null;
+  w: number;
+  h: number;
+  key: string;
+};
+
 const PROBE_WIDTH = 512;
 const MAX_RASTER = 8192;
 const ALPHA_EPS = 2;
@@ -17,7 +27,7 @@ const ALPHA_EPS = 2;
 type Ink = { fracW: number; fracH: number };
 
 const probeCache = new Map<string, Ink>();
-const maskCache = new Map<string, MaskData>();
+const maskCache = new Map<string, MaskPair>();
 const MASK_CACHE_MAX = 4;
 
 export function hashSvg(text: string): string {
@@ -31,8 +41,14 @@ export function hashSvg(text: string): string {
   return h1.toString(36) + h2.toString(36) + text.length.toString(36);
 }
 
-/** Give the root svg an explicit pixel size so the browser rasterizes it there. */
-function sizedSvg(text: string, width: number): { markup: string; height: number } {
+/** Give the root svg an explicit pixel size so the browser rasterizes it there.
+ *  With `forcedHeight`, the drawing is fitted into that exact box with
+ *  xMidYMid meet, which is what puts a second file in register with the first. */
+function sizedSvg(
+  text: string,
+  width: number,
+  forcedHeight?: number
+): { markup: string; height: number } {
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
   const svg = doc.documentElement;
   if (!svg || svg.nodeName.toLowerCase() !== "svg") {
@@ -49,15 +65,19 @@ function sizedSvg(text: string, width: number): { markup: string; height: number
     aspect = attrH / attrW;
     svg.setAttribute("viewBox", `0 0 ${attrW} ${attrH}`);
   }
-  const height = Math.max(1, Math.round(width * aspect));
+  const height = forcedHeight ?? Math.max(1, Math.round(width * aspect));
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
   return { markup: new XMLSerializer().serializeToString(svg), height };
 }
 
-async function alphaPlane(text: string, width: number): Promise<MaskData> {
-  const { markup, height } = sizedSvg(text, width);
+async function alphaPlane(
+  text: string,
+  width: number,
+  forcedHeight?: number
+): Promise<MaskData> {
+  const { markup, height } = sizedSvg(text, width, forcedHeight);
   const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(markup);
   const img = new Image();
   img.decoding = "sync";
@@ -123,31 +143,61 @@ export async function probeInk(text: string): Promise<Ink> {
   return ink;
 }
 
-/** Rasterize so the ink box is about contentPx on its longest side, cropped. */
-export async function loadLogoMask(text: string, contentPx: number): Promise<MaskData> {
-  const bucket = Math.ceil(Math.max(64, contentPx) / 256) * 256;
-  const key = hashSvg(text) + ":" + bucket;
-  const hit = maskCache.get(key);
-  if (hit) return hit;
-
-  const ink = await probeInk(text);
-  const longest = Math.max(ink.fracW, ink.fracH, 1e-6);
-  const width = Math.max(PROBE_WIDTH, Math.min(Math.round(bucket / longest), MAX_RASTER));
-
-  const full = await alphaPlane(text, width);
-  const box = inkBox(full);
-  if (!box) throw new Error("this SVG rasterizes to an empty image");
+function cropTo(plane: MaskData, box: [number, number, number, number]): Uint8Array {
   const [x0, y0, x1, y1] = box;
   const w = x1 - x0;
   const h = y1 - y0;
-  const data = new Uint8Array(w * h);
+  const out = new Uint8Array(w * h);
   for (let y = 0; y < h; y++) {
-    data.set(full.data.subarray((y0 + y) * full.w + x0, (y0 + y) * full.w + x1), y * w);
+    out.set(plane.data.subarray((y0 + y) * plane.w + x0, (y0 + y) * plane.w + x1), y * w);
   }
-  const mask: MaskData = { data, w, h, key };
-  maskCache.set(key, mask);
+  return out;
+}
+
+/**
+ * Rasterize so the ink box of `shapeText` is about contentPx on its longest
+ * side, then crop to it.
+ *
+ * When `logoText` is given, it is rasterized into the very same pixel box with
+ * xMidYMid meet and cropped with the same rectangle, so the two files stay in
+ * register: the silhouette comes from one file and the artwork drawn on top
+ * from the other. Framing is always driven by the shape.
+ */
+export async function loadMaskPair(
+  shapeText: string,
+  logoText: string | null,
+  contentPx: number
+): Promise<MaskPair> {
+  const bucket = Math.ceil(Math.max(64, contentPx) / 256) * 256;
+  const separate = !!logoText && logoText !== shapeText;
+  const key =
+    hashSvg(shapeText) + (separate ? "+" + hashSvg(logoText as string) : "") + ":" + bucket;
+  const hit = maskCache.get(key);
+  if (hit) return hit;
+
+  const ink = await probeInk(shapeText);
+  const longest = Math.max(ink.fracW, ink.fracH, 1e-6);
+  const width = Math.max(PROBE_WIDTH, Math.min(Math.round(bucket / longest), MAX_RASTER));
+
+  const shapePlane = await alphaPlane(shapeText, width);
+  const box = inkBox(shapePlane);
+  if (!box) throw new Error("this SVG rasterizes to an empty image");
+
+  const pair: MaskPair = {
+    shape: cropTo(shapePlane, box),
+    logo: null,
+    w: box[2] - box[0],
+    h: box[3] - box[1],
+    key,
+  };
+  if (separate) {
+    const logoPlane = await alphaPlane(logoText as string, shapePlane.w, shapePlane.h);
+    pair.logo = cropTo(logoPlane, box);
+  }
+
+  maskCache.set(key, pair);
   while (maskCache.size > MASK_CACHE_MAX) {
     maskCache.delete(maskCache.keys().next().value as string);
   }
-  return mask;
+  return pair;
 }

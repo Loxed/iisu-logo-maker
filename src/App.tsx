@@ -12,10 +12,10 @@ import { DEFAULTS, PRESETS, type Params } from "./lib/params";
 import { Renderer, downloadBlob, toImageData, toPngBlob } from "./lib/client";
 import { makeZip, type ZipEntry } from "./lib/zip";
 
-type Source = { name: string; text: string };
+type Source = { name: string; text: string; shapeRef?: number };
 type Status = { kind: "idle" | "busy" | "error"; text: string };
 
-const EXAMPLES = ["bolt.svg", "loop.svg", "donut.svg", "star.svg", "glyph.svg"];
+const EXAMPLES = ["bolt.svg", "facets.svg", "facets-solid.svg", "loop.svg", "donut.svg", "star.svg", "glyph.svg"];
 const PREVIEW_SIZES = [480, 640, 800, 1024];
 
 export default function App() {
@@ -57,6 +57,19 @@ export default function App() {
   }, []);
 
   const source = sources[active];
+  const shapeText =
+    source && source.shapeRef !== undefined ? sources[source.shapeRef]?.text : undefined;
+
+  const setShapeRef = useCallback(
+    (index: number) => {
+      setSources((prev) =>
+        prev.map((s, i) =>
+          i === active ? { ...s, shapeRef: index < 0 ? undefined : index } : s
+        )
+      );
+    },
+    [active]
+  );
 
   // live preview, debounced
   useEffect(() => {
@@ -65,10 +78,11 @@ export default function App() {
       const id = ++requestRef.current;
       setStatus({ kind: "busy", text: "rendering" });
       try {
-        const out = await rendererRef.current!.render(source.text, {
-          ...params,
-          canvasSize: previewSize,
-        });
+        const out = await rendererRef.current!.render(
+          source.text,
+          { ...params, canvasSize: previewSize },
+          shapeText
+        );
         if (id !== requestRef.current) return;
         const canvas = canvasRef.current;
         if (canvas) {
@@ -87,7 +101,7 @@ export default function App() {
       }
     }, 100);
     return () => window.clearTimeout(handle);
-  }, [source, params, previewSize]);
+  }, [source, shapeText, params, previewSize]);
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const incoming: Source[] = [];
@@ -110,24 +124,28 @@ export default function App() {
     if (!source) return;
     setStatus({ kind: "busy", text: `exporting ${params.canvasSize} px` });
     try {
-      const out = await rendererRef.current!.render(source.text, params);
+      const out = await rendererRef.current!.render(source.text, params, shapeText);
       downloadBlob(await toPngBlob(out), source.name.replace(/\.svgz?$/i, "") + "_extruded.png");
       setStatus({ kind: "idle", text: `exported in ${out.ms} ms` });
     } catch (err) {
       setStatus({ kind: "error", text: err instanceof Error ? err.message : String(err) });
     }
-  }, [source, params]);
+  }, [source, shapeText, params]);
 
   const exportAll = useCallback(async () => {
     if (!sources.length) return;
     const entries: ZipEntry[] = [];
+    // a file that only serves as another file's silhouette is not a deliverable
+    const referenced = new Set(sources.map((s) => s.shapeRef).filter((i) => i !== undefined));
+    const queue = sources.filter((_, i) => !referenced.has(i));
     try {
-      for (let i = 0; i < sources.length; i++) {
-        setStatus({ kind: "busy", text: `batch ${i + 1} of ${sources.length}` });
-        const out = await rendererRef.current!.render(sources[i].text, params);
+      for (let i = 0; i < queue.length; i++) {
+        setStatus({ kind: "busy", text: `batch ${i + 1} of ${queue.length}` });
+        const ref = queue[i].shapeRef !== undefined ? sources[queue[i].shapeRef!]?.text : undefined;
+        const out = await rendererRef.current!.render(queue[i].text, params, ref);
         const blob = await toPngBlob(out);
         entries.push({
-          name: sources[i].name.replace(/\.svgz?$/i, "") + "_extruded.png",
+          name: queue[i].name.replace(/\.svgz?$/i, "") + "_extruded.png",
           data: new Uint8Array(await blob.arrayBuffer()),
         });
       }
@@ -171,7 +189,7 @@ export default function App() {
     >
       <aside className="panel">
         <header>
-          <h1>SVG Extrude</h1>
+          <h1>iiSU Icon Maker</h1>
           <span className={`status ${status.kind}`}>{status.text}</span>
         </header>
 
@@ -197,6 +215,22 @@ export default function App() {
                   {s.name}
                 </option>
               ))}
+            </select>
+          </Row>
+          <Row label="Shape ref">
+            <select
+              value={source?.shapeRef ?? -1}
+              title="file whose silhouette drives the outline and the extrusion"
+              onChange={(e) => setShapeRef(Number(e.target.value))}
+            >
+              <option value={-1}>same as logo</option>
+              {sources.map((s, i) =>
+                i === active ? null : (
+                  <option key={`ref-${s.name}-${i}`} value={i}>
+                    {s.name}
+                  </option>
+                )
+              )}
             </select>
           </Row>
           <Row label="Preset">

@@ -111,6 +111,14 @@ is no backend to run.
   value reverts on blur instead of corrupting the parameter. Each gradient stop
   has its own hex field plus its position from 0 to 1, and the bar above the
   list previews the ramp.
+- Shape ref, under Source, borrows another loaded file's silhouette for the
+  outline and the extrusion while keeping the current file as the white
+  artwork. That is what to use for an icon published as separate facets with
+  gaps between them, where growing an outline around the geometry itself would
+  follow every gap.
+- Colors, under Border, sets how many stops the gradient has, from 2 to 5. The
+  current ramp is resampled, so the look is kept and only the number of handles
+  changes. Each stop keeps its own position and hex field.
 - Fill holes, under Border, closes the enclosed pockets of the shape. Turn it
   on when an icon with loops should read as one solid volume rather than show
   the extrusion through its holes.

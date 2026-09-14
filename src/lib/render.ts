@@ -58,6 +58,7 @@ function flatExtrusionLut(
 
 export function renderToRgba(
   mask: Uint8Array,
+  logoMask: Uint8Array | null,
   maskW: number,
   maskH: number,
   rawParams: Params
@@ -73,16 +74,23 @@ export function renderToRgba(
   // --- place the logo on the supersampled canvas -------------------------
   const tw = Math.max(1, Math.round(layout.logo.w * ss));
   const th = Math.max(1, Math.round(layout.logo.h * ss));
-  const scaled = resizeArea(mask, maskW, maskH, tw, th);
-  const logoWork: Mask = { data: new Uint8Array(work * work), w: work, h: work };
   const ox = Math.max(0, Math.min(Math.round(layout.logo.x * ss), work - tw));
   const oy = Math.max(0, Math.min(Math.round(layout.logo.y * ss), work - th));
-  for (let y = 0; y < th; y++) {
-    logoWork.data.set(scaled.subarray(y * tw, (y + 1) * tw), (oy + y) * work + ox);
-  }
+  const place = (src: Uint8Array): Mask => {
+    const scaled = resizeArea(src, maskW, maskH, tw, th);
+    const out: Mask = { data: new Uint8Array(work * work), w: work, h: work };
+    for (let y = 0; y < th; y++) {
+      out.data.set(scaled.subarray(y * tw, (y + 1) * tw), (oy + y) * work + ox);
+    }
+    return out;
+  };
+  // the silhouette drives outline and sweep; the artwork on top may come from
+  // a different file, placed with the very same transform
+  const shapeWork = place(mask);
+  const logoWork = logoMask ? place(logoMask) : shapeWork;
 
   // --- front face and sweep ----------------------------------------------
-  let outerWork = dilateRound(logoWork, p.strokeWidth * ss);
+  let outerWork = dilateRound(shapeWork, p.strokeWidth * ss);
   if (p.fillHoles) outerWork = fillEnclosed(outerWork);
   let extWork: Uint8Array | null = null;
   let depthWork: Uint8Array | null = null;
@@ -96,6 +104,7 @@ export function renderToRgba(
   const logoA = resizeArea(logoWork.data, work, work, size, size);
   const outerA = resizeArea(outerWork.data, work, work, size, size);
   logoWork.data = new Uint8Array(0);
+  shapeWork.data = new Uint8Array(0);
   outerWork.data = new Uint8Array(0);
 
   let extA: Uint8Array | null = null;
