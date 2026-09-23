@@ -62,7 +62,7 @@ export const DEFAULTS: Params = {
   logoEnabled: true,
 
   strokeWidth: 210,
-  fillHoles: false,
+  fillHoles: true,
   gradientStops: [
     { pos: 0, color: "#2FFF74" },
     { pos: 1, color: "#369052" },
@@ -75,7 +75,7 @@ export const DEFAULTS: Params = {
   extrusionEnabled: true,
   extrusionDepth: 150,
   extrusionAngle: 90,
-  extrusionColor: "auto",
+  extrusionColor: "gradient",
 
   shadingEnabled: true,
   extrusionDarken: 0.15,

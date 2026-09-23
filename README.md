@@ -5,7 +5,7 @@ style of ibisPaint X "Extrude Parallel". Runs entirely in the browser: the SVG
 never leaves the machine, there is no backend, and the built site is static
 files that GitHub Pages or Cloudflare Pages serve as they are.
 
-Input is an SVG plus parameters, output is a transparent PNG, 3000 x 3000 by
+Input is an SVG (or a PNG with transparency) plus parameters, output is a transparent PNG, 3000 x 3000 by
 default.
 
 The extrusion is a geometric sweep of the expanded silhouette: the union of the
@@ -111,7 +111,7 @@ point it came from, so the side face carries the color of the region above it.
 | `logoColor` | `#FFFFFF` | fill of the original SVG silhouette |
 | `logoEnabled` | true | draw the silhouette on top of the front face |
 | `strokeWidth` | 210 | outside stroke in pixels, round joins |
-| `fillHoles` | false | close the pockets of the front face that the canvas border cannot reach, so an infinity loop or a letter O reads as one solid shape instead of showing the sweep through its holes |
+| `fillHoles` | true | close the pockets of the front face that the canvas border cannot reach, so an infinity loop or a letter O reads as one solid shape instead of showing the sweep through its holes |
 | `gradientStops` | `0 #2FFF74`, `1 #369052` | any number of stops, position 0 to 1. The 2 3 4 5 buttons resample the current ramp to that many evenly spaced colors, and `+` inserts one more |
 | `gradientMode` | `linear` | `linear` for one ramp, `points` for color anchors placed in the box |
 | `gradientAngle` | 90 | linear mode: 90 runs the gradient top to bottom, 0 left to right |
@@ -120,7 +120,7 @@ point it came from, so the side face carries the color of the region above it.
 | `extrusionEnabled` | true | draw the swept body behind the front face |
 | `extrusionDepth` | 150 | sweep distance in pixels |
 | `extrusionAngle` | 90 | 90 is straight down, 0 is right, 180 is left |
-| `extrusionColor` | `auto` | `auto` takes the last gradient stop, `gradient` gives every swept pixel the gradient color of the front face pixel it came from, otherwise a hex color |
+| `extrusionColor` | `gradient` | `auto` takes the last gradient stop, `gradient` gives every swept pixel the gradient color of the front face pixel it came from, otherwise a hex color |
 | `shadingEnabled` | true | apply the darkening, the depth ramp and the edge accent |
 | `extrusionDarken` | 0.15 | HSV value drop on the whole extrusion, so the side face separates from the front face even at the bottom of the icon where both would otherwise share a color |
 | `shadingStrength` | 0.20 | extra value drop at the far end of the sweep |

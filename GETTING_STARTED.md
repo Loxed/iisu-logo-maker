@@ -97,7 +97,8 @@ is no backend to run.
 
 ## 6. Use it
 
-- Add SVG, or drop files anywhere on the page. Several at once is fine.
+- Add SVG / PNG, or drop files anywhere on the page. PNGs use their alpha
+  channel as the silhouette, so they need a transparent background. Several at once is fine.
 - Every control re-renders a small preview, about 150 ms at 640 px.
 - Export PNG writes the current icon at the full canvas size to your Downloads
   folder. Export all as ZIP does every loaded icon with the same parameters.
@@ -126,9 +127,9 @@ is no backend to run.
 - Colors, under Border, sets how many stops the gradient has, from 2 to 5. The
   current ramp is resampled, so the look is kept and only the number of handles
   changes. Each stop keeps its own position and hex field.
-- Fill holes, under Border, closes the enclosed pockets of the shape. Turn it
-  on when an icon with loops should read as one solid volume rather than show
-  the extrusion through its holes.
+- Fill holes, under Border, closes the enclosed pockets of the shape. It is on
+  by default, so an icon with loops reads as one solid volume. Turn it off to
+  show the extrusion through its holes.
 - Save preset writes the current values as JSON, Load preset reads them back.
 
 ## Troubleshooting

@@ -18,6 +18,29 @@ type Status = { kind: "idle" | "busy" | "error"; text: string };
 const EXAMPLES = ["bolt.svg", "facets.svg", "facets-solid.svg", "loop.svg", "donut.svg", "star.svg", "glyph.svg"];
 const PREVIEW_SIZES = [480, 640, 800, 1024];
 
+const stripExt = (name: string) => name.replace(/\.(svgz?|png)$/i, "");
+
+/** Wrap a PNG in an SVG at its native pixel size, so the rest of the pipeline
+ *  (alpha mask, shape ref, batch export) handles it like any other SVG. The
+ *  silhouette comes from the PNG alpha channel. */
+async function pngToSvg(file: File): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+  const bitmap = await createImageBitmap(file);
+  const { width, height } = bitmap;
+  bitmap.close();
+  if (!width || !height) throw new Error("empty PNG");
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ` +
+    `width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
+    `<image width="${width}" height="${height}" href="${dataUrl}" xlink:href="${dataUrl}"/></svg>`
+  );
+}
+
 export default function App() {
   const [params, setParams] = useState<Params>(DEFAULTS);
   const [sources, setSources] = useState<Source[]>([]);
@@ -106,11 +129,18 @@ export default function App() {
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const incoming: Source[] = [];
     for (const file of Array.from(files)) {
-      if (!/\.svgz?$/i.test(file.name) && file.type !== "image/svg+xml") continue;
-      incoming.push({ name: file.name, text: await file.text() });
+      if (/\.svgz?$/i.test(file.name) || file.type === "image/svg+xml") {
+        incoming.push({ name: file.name, text: await file.text() });
+      } else if (/\.png$/i.test(file.name) || file.type === "image/png") {
+        try {
+          incoming.push({ name: file.name, text: await pngToSvg(file) });
+        } catch {
+          setStatus({ kind: "error", text: `could not read ${file.name}` });
+        }
+      }
     }
     if (!incoming.length) {
-      setStatus({ kind: "error", text: "no SVG file in that drop" });
+      setStatus({ kind: "error", text: "no SVG or PNG file in that drop" });
       return;
     }
     setSources((prev) => {
@@ -125,7 +155,7 @@ export default function App() {
     setStatus({ kind: "busy", text: `exporting ${params.canvasSize} px` });
     try {
       const out = await rendererRef.current!.render(source.text, params, shapeText);
-      downloadBlob(await toPngBlob(out), source.name.replace(/\.svgz?$/i, "") + "_extruded.png");
+      downloadBlob(await toPngBlob(out), stripExt(source.name) + "_extruded.png");
       setStatus({ kind: "idle", text: `exported in ${out.ms} ms` });
     } catch (err) {
       setStatus({ kind: "error", text: err instanceof Error ? err.message : String(err) });
@@ -145,7 +175,7 @@ export default function App() {
         const out = await rendererRef.current!.render(queue[i].text, params, ref);
         const blob = await toPngBlob(out);
         entries.push({
-          name: queue[i].name.replace(/\.svgz?$/i, "") + "_extruded.png",
+          name: stripExt(queue[i].name) + "_extruded.png",
           data: new Uint8Array(await blob.arrayBuffer()),
         });
       }
@@ -199,7 +229,7 @@ export default function App() {
             <label className="file-btn">
               <input
                 type="file"
-                accept=".svg,image/svg+xml"
+                accept=".svg,image/svg+xml,.png,image/png"
                 multiple
                 hidden
                 onChange={(e) => {
@@ -207,7 +237,7 @@ export default function App() {
                   e.target.value = "";
                 }}
               />
-              <span>Add SVG</span>
+              <span>Add SVG / PNG</span>
             </label>
             <select value={active} onChange={(e) => setActive(Number(e.target.value))}>
               {sources.map((s, i) => (
